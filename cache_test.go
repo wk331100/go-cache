@@ -1,8 +1,9 @@
 package go_cache
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -12,8 +13,7 @@ var (
 )
 
 func TestGetSet(t *testing.T) {
-	err := c.Set("name", name1)
-	require.Nil(t, err)
+	c.Set("name", name1)
 	name, err := c.Get("name")
 	require.Nil(t, err)
 	require.Equal(t, name1, name)
@@ -111,4 +111,119 @@ func TestHKeysValsDel(t *testing.T) {
 	keys, err = c.HKeys(key)
 	require.Nil(t, err)
 	require.Equal(t, []string{"name"}, keys)
+}
+
+func TestSAddSRem(t *testing.T) {
+	key := "class1"
+	m1 := "zhangSan"
+	m2 := "liSi"
+	c.SAdd(key, m1)
+	c.SAdd(key, m2)
+	members := c.SCard(key)
+	require.Equal(t, 2, members)
+	c.SRem(key, m1)
+	members = c.SCard(key)
+	require.Equal(t, 1, members)
+	r1, err := c.SIsMember(key, m1)
+	require.Nil(t, err)
+	require.False(t, r1)
+	r2, err := c.SIsMember(key, m2)
+	require.Nil(t, err)
+	require.True(t, r2)
+}
+
+func TestSUnionSInter(t *testing.T) {
+	key1 := "class1"
+	key2 := "class2"
+	m1 := "zhangSan"
+	m2 := "liSi"
+	m3 := "wangWu"
+	c.SAdd(key1, m1)
+	c.SAdd(key1, m2)
+	c.SAdd(key2, m2)
+	c.SAdd(key2, m3)
+	ms, err := c.SMembers(key1)
+	require.Nil(t, err)
+	require.Equal(t, []any{m1, m2}, ms)
+	union := c.SUnion(key1, key2)
+	um, _ := union.SMembers()
+	require.Equal(t, 3, len(um))
+	inter := c.SInter(key1, key2)
+	im, _ := inter.SMembers()
+	require.Equal(t, 1, len(im))
+}
+
+func TestZAddZRem(t *testing.T) {
+	key := "english"
+	e1 := "zhangSan"
+	e2 := "liSi"
+	e3 := "wangWu"
+	c.ZAdd(key, e1, 100)
+	c.ZAdd(key, e2, 90)
+	c.ZAdd(key, e3, 95)
+	num := c.ZCard(key)
+	require.Equal(t, 3, num)
+	c.ZRem(key, e3)
+	num = c.ZCard(key)
+	require.Equal(t, 2, num)
+}
+
+func TestZIncrDecr(t *testing.T) {
+	key := "english"
+	e1 := "zhangSan"
+	e2 := "liSi"
+	c.ZAdd(key, e1, 100)
+	c.ZAdd(key, e2, 90)
+
+	res1 := c.ZIncrBy(key, e1, 20)
+	require.Equal(t, float64(120), res1)
+	res2 := c.ZDecrBy(key, e2, 10)
+	require.Equal(t, float64(80), res2)
+}
+
+func TestRank(t *testing.T) {
+	key := "rank"
+	e1 := "zhangSan"
+	e2 := "liSi"
+	e3 := "wangWu"
+	c.ZAdd(key, e1, 100)
+	c.ZAdd(key, e2, 90)
+	r1 := c.ZRank(key, e1)
+	require.Equal(t, 1, r1)
+	r2 := c.ZRank(key, e2)
+	require.Equal(t, 2, r2)
+	c.ZAdd(key, e3, 95)
+	r2 = c.ZRank(key, e2)
+	require.Equal(t, 3, r2)
+	r1, score := c.ZRankWithScore(key, e1)
+	require.Equal(t, 1, r1)
+	require.Equal(t, float64(100), score)
+
+	r1 = c.ZRevRank(key, e1)
+	require.Equal(t, 3, r1)
+	r1, score = c.ZRevRankWithScore(key, e1)
+	require.Equal(t, 3, r1)
+	require.Equal(t, float64(100), score)
+}
+
+func TestRange(t *testing.T) {
+	key := "range"
+	e1 := "zhangSan"
+	e2 := "liSi"
+	e3 := "wangWu"
+	c.ZAdd(key, e1, 100)
+	c.ZAdd(key, e2, 90)
+	c.ZAdd(key, e3, 95)
+	elements, err := c.ZRange(key, 0, 1)
+	require.Nil(t, err)
+	require.Equal(t, []string{e1, e3}, elements)
+	elements, err = c.ZRevRange(key, 0, 1)
+	require.Nil(t, err)
+	require.Equal(t, []string{e2, e3}, elements)
+	m, err := c.ZRangeWithScore(key, 1, 1)
+	require.Nil(t, err)
+	require.Equal(t, map[string]float64{e3: 95}, m)
+	m, err = c.ZRevRangeWithScore(key, 1, 1)
+	require.Nil(t, err)
+	require.Equal(t, map[string]float64{e3: 95}, m)
 }
