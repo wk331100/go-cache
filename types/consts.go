@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 const (
 	DefaultExpiration = -1
 	TypeString        = KeyType("string")
@@ -9,12 +11,9 @@ const (
 	TypeZSet          = KeyType("zSet")
 	DefaultScore      = float64(0)
 	ErrorRank         = -1
-)
 
-var (
-	SupportTypes = []KeyType{
-		TypeString, TypeList, TypeHash, TypeSet, TypeZSet,
-	}
+	DefaultCleanDuration = time.Second
+	DefaultCleanItems    = 100
 )
 
 // KeyType 键类型

@@ -3,6 +3,7 @@ package types
 import (
 	"sort"
 	"sync"
+	"time"
 )
 
 // NewZSets 创建Sets类型实例
@@ -18,8 +19,28 @@ type ZSets struct {
 	items map[string]*ZSet
 }
 
+// Exist 判断k是否存在
+func (zs *ZSets) Exist(k string) bool {
+	zs.mu.Lock()
+	defer zs.mu.Unlock()
+	return zs.exist(k)
+}
+
+// exist 判断k是否存在
+func (zs *ZSets) exist(k string) bool {
+	z, exist := zs.items[k]
+	if !exist {
+		return false
+	}
+	if z.isExpired() {
+		zs.Del(k)
+		return false
+	}
+	return true
+}
+
 // ZAdd 向有序集合中添加一个元素
-func (zs *ZSets) ZAdd(key, element string, score float64) {
+func (zs *ZSets) ZAdd(key, element string, score float64) bool {
 	zs.mu.Lock()
 	defer zs.mu.Unlock()
 	z, exist := zs.items[key]
@@ -28,6 +49,7 @@ func (zs *ZSets) ZAdd(key, element string, score float64) {
 	}
 	z.ZAdd(element, score)
 	zs.items[key] = z
+	return exist
 }
 
 // ZRem 从有序集合中，删除一个元素
@@ -73,6 +95,9 @@ func (zs *ZSets) ZCard(key string) int {
 	z, exist := zs.items[key]
 	if !exist {
 		return 0
+	} else if z.isExpired() {
+		zs.Del(key)
+		return 0
 	}
 	return z.ZCard()
 }
@@ -83,6 +108,9 @@ func (zs *ZSets) ZRank(key, element string) int {
 	defer zs.mu.RUnlock()
 	z, exist := zs.items[key]
 	if !exist {
+		return ErrorRank
+	} else if z.isExpired() {
+		zs.Del(key)
 		return ErrorRank
 	}
 	return z.ZRank(element)
@@ -95,6 +123,9 @@ func (zs *ZSets) ZRankWithScore(key, element string) (int, float64) {
 	z, exist := zs.items[key]
 	if !exist {
 		return ErrorRank, DefaultScore
+	} else if z.isExpired() {
+		zs.Del(key)
+		return ErrorRank, DefaultScore
 	}
 	return z.ZRankWithScore(element)
 }
@@ -105,6 +136,9 @@ func (zs *ZSets) ZRevRank(key, element string) int {
 	defer zs.mu.RUnlock()
 	z, exist := zs.items[key]
 	if !exist {
+		return ErrorRank
+	} else if z.isExpired() {
+		zs.Del(key)
 		return ErrorRank
 	}
 	return z.ZRevRank(element)
@@ -117,6 +151,9 @@ func (zs *ZSets) ZRevRankWithScore(key, element string) (int, float64) {
 	z, exist := zs.items[key]
 	if !exist {
 		return ErrorRank, DefaultScore
+	} else if z.isExpired() {
+		zs.Del(key)
+		return ErrorRank, DefaultScore
 	}
 	return z.ZRevRankWithScore(element)
 }
@@ -127,6 +164,9 @@ func (zs *ZSets) ZRange(key string, start, stop int) ([]string, error) {
 	defer zs.mu.RUnlock()
 	z, exist := zs.items[key]
 	if !exist {
+		return nil, ErrZSetKey
+	} else if z.isExpired() {
+		zs.Del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -142,6 +182,9 @@ func (zs *ZSets) ZRangeWithScore(key string, start, stop int) (map[string]float6
 	z, exist := zs.items[key]
 	if !exist {
 		return nil, ErrZSetKey
+	} else if z.isExpired() {
+		zs.Del(key)
+		return nil, ErrZSetKey
 	}
 	if start > stop {
 		return nil, ErrStartStop
@@ -155,6 +198,9 @@ func (zs *ZSets) ZRevRange(key string, start, stop int) ([]string, error) {
 	defer zs.mu.RUnlock()
 	z, exist := zs.items[key]
 	if !exist {
+		return nil, ErrZSetKey
+	} else if z.isExpired() {
+		zs.Del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -170,6 +216,9 @@ func (zs *ZSets) ZRevRangeWithScore(key string, start, stop int) (map[string]flo
 	z, exist := zs.items[key]
 	if !exist {
 		return nil, ErrZSetKey
+	} else if z.isExpired() {
+		zs.Del(key)
+		return nil, ErrZSetKey
 	}
 	if start > stop {
 		return nil, ErrStartStop
@@ -182,6 +231,51 @@ func (zs *ZSets) Del(k string) {
 	zs.mu.Lock()
 	defer zs.mu.Unlock()
 	delete(zs.items, k)
+}
+
+// Expiration 设置超时时间
+func (zs *ZSets) Expiration(k string, d time.Duration) error {
+	zs.mu.Lock()
+	defer zs.mu.Unlock()
+	if !zs.exist(k) {
+		return ErrKeyNotExist
+	}
+	zs.items[k].expiration = time.Now().Add(d).UnixNano()
+	return nil
+}
+
+// ClearExpiration 清理过期的key
+func (zs *ZSets) ClearExpiration() {
+	zs.mu.Lock()
+	defer zs.mu.Unlock()
+	for key, item := range zs.items {
+		if item.isExpired() {
+			delete(zs.items, key)
+		}
+	}
+}
+
+// RandomClearExpiration 随机清理过期的key
+func (zs *ZSets) RandomClearExpiration() {
+	zs.mu.Lock()
+	defer zs.mu.Unlock()
+	var counter int
+	for key, item := range zs.items {
+		if counter > DefaultCleanItems {
+			return
+		}
+		if item.isExpired() {
+			delete(zs.items, key)
+		}
+		counter++
+	}
+}
+
+// Flush 清空缓存
+func (zs *ZSets) Flush() {
+	zs.mu.Lock()
+	defer zs.mu.Unlock()
+	zs.items = make(map[string]*ZSet)
 }
 
 // NewZSet 创建一个集合的实例
@@ -342,4 +436,12 @@ func (z *ZSet) ZRevRangeWithScore(start, stop int) map[string]float64 {
 		result[element] = z.elements[element]
 	}
 	return result
+}
+
+// isExpired 判断一个元素是否过期
+func (z *ZSet) isExpired() bool {
+	if time.Now().UnixNano() > z.expiration {
+		return true
+	}
+	return false
 }

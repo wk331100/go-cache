@@ -1,6 +1,9 @@
 package types
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // NewSets 创建Sets类型实例
 func NewSets() *Sets {
@@ -15,8 +18,28 @@ type Sets struct {
 	items map[string]*Set
 }
 
+// Exist 判断k是否存在
+func (ss *Sets) Exist(k string) bool {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	return ss.exist(k)
+}
+
+// exist 判断k是否存在
+func (ss *Sets) exist(k string) bool {
+	s, exist := ss.items[k]
+	if !exist {
+		return false
+	}
+	if s.isExpired() {
+		ss.Del(k)
+		return false
+	}
+	return true
+}
+
 // SAdd 向集合中添加一个元素
-func (ss *Sets) SAdd(k string, m any) {
+func (ss *Sets) SAdd(k string, m any) bool {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
@@ -26,6 +49,7 @@ func (ss *Sets) SAdd(k string, m any) {
 	}
 	s.SAdd(m)
 	ss.items[k] = s
+	return exist
 }
 
 // SRem 从集合中，删除一个元素
@@ -45,6 +69,9 @@ func (ss *Sets) SMembers(k string) ([]any, error) {
 	s, exist := ss.items[k]
 	if !exist {
 		return nil, ErrSetKey
+	} else if s.isExpired() {
+		ss.Del(k)
+		return nil, ErrSetKey
 	}
 	return s.SMembers()
 }
@@ -55,6 +82,9 @@ func (ss *Sets) SIsMember(k string, m any) (bool, error) {
 	defer ss.mu.Unlock()
 	s, exist := ss.items[k]
 	if !exist {
+		return false, ErrSetKey
+	} else if s.isExpired() {
+		ss.Del(k)
 		return false, ErrSetKey
 	}
 	return s.SIsMember(m)
@@ -67,6 +97,9 @@ func (ss *Sets) SCard(k string) int {
 	s, exist := ss.items[k]
 	if !exist {
 		return 0
+	} else if s.isExpired() {
+		ss.Del(k)
+		return 0
 	}
 	return s.SCard()
 }
@@ -76,7 +109,13 @@ func (ss *Sets) SUnion(k1, k2 string) *Set {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	s1, exist1 := ss.items[k1]
+	if exist1 && s1.isExpired() {
+		exist1 = false
+	}
 	s2, exist2 := ss.items[k2]
+	if exist2 && s2.isExpired() {
+		exist2 = false
+	}
 	if !exist1 && !exist2 {
 		return nil
 	} else if exist1 && !exist2 {
@@ -92,7 +131,13 @@ func (ss *Sets) SInter(k1, k2 string) *Set {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	s1, exist1 := ss.items[k1]
+	if exist1 && s1.isExpired() {
+		exist1 = false
+	}
 	s2, exist2 := ss.items[k2]
+	if exist2 && s2.isExpired() {
+		exist2 = false
+	}
 	if !exist1 || !exist2 {
 		return nil
 	}
@@ -104,6 +149,51 @@ func (ss *Sets) Del(k string) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	delete(ss.items, k)
+}
+
+// Expiration 设置超时时间
+func (ss *Sets) Expiration(k string, d time.Duration) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if !ss.exist(k) {
+		return ErrKeyNotExist
+	}
+	ss.items[k].expiration = time.Now().Add(d).UnixNano()
+	return nil
+}
+
+// ClearExpiration 清理过期的key
+func (ss *Sets) ClearExpiration() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	for key, item := range ss.items {
+		if item.isExpired() {
+			delete(ss.items, key)
+		}
+	}
+}
+
+// RandomClearExpiration 随机清理过期的key
+func (ss *Sets) RandomClearExpiration() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	var counter int
+	for key, item := range ss.items {
+		if counter > DefaultCleanItems {
+			return
+		}
+		if item.isExpired() {
+			delete(ss.items, key)
+		}
+		counter++
+	}
+}
+
+// Flush 清空缓存
+func (ss *Sets) Flush() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.items = make(map[string]*Set)
 }
 
 // newSet 创建一个集合的实例
@@ -170,4 +260,12 @@ func (s *Set) SInter(other *Set) *Set {
 		}
 	}
 	return inter
+}
+
+// isExpired 判断一个元素是否过期
+func (s *Set) isExpired() bool {
+	if time.Now().UnixNano() > s.expiration {
+		return true
+	}
+	return false
 }

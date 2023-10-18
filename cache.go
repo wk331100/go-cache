@@ -2,12 +2,14 @@ package go_cache
 
 import (
 	"go-cache/types"
+	"math/rand"
+	"sync"
 	"time"
 )
 
 // NewCache 创建新的缓存对象
 func NewCache() *Cache {
-	return &Cache{
+	c := &Cache{
 		keyMap:  make(map[string]types.KeyType),
 		strings: types.NewStrings(),
 		lists:   types.NewLists(),
@@ -15,11 +17,14 @@ func NewCache() *Cache {
 		sets:    types.NewSets(),
 		zSets:   types.NewZSets(),
 	}
+	go NewCleaner(c).keepClearExpiration()
+	return c
 }
 
 // Cache 缓存结构
 // items 为string类型的映射
 type Cache struct {
+	mu      sync.Mutex
 	keyMap  map[string]types.KeyType
 	strings *types.Strings
 	lists   *types.Lists
@@ -32,12 +37,20 @@ type Cache struct {
 
 // Set 缓存k的值为v
 func (c *Cache) Set(k string, v any) {
-	c.strings.Set(k, v)
+	if exist := c.strings.Set(k, v); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeString
+	}
 }
 
 // SetEx 缓存k的值为v,并且设置超时时间d
 func (c *Cache) SetEx(k string, v any, d time.Duration) {
-	c.strings.SetEx(k, v, d)
+	if exist := c.strings.SetEx(k, v, d); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeString
+	}
 }
 
 // Get 获取一个string类型值
@@ -69,7 +82,11 @@ func (c *Cache) DecrBy(k string, v int64) {
 
 // LPush 从队列k的头部，添加一个元素v
 func (c *Cache) LPush(k string, v any) {
-	c.lists.LPush(k, v)
+	if exist := c.lists.LPush(k, v); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeList
+	}
 }
 
 // LPop 从队列k的头部，弹出一个元素
@@ -79,7 +96,11 @@ func (c *Cache) LPop(k string) (any, error) {
 
 // RPush 从队列k的尾部，添加一个元素
 func (c *Cache) RPush(k string, v any) {
-	c.lists.RPush(k, v)
+	if exist := c.lists.RPush(k, v); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeList
+	}
 }
 
 // RPop 从队列k的尾部，弹出一个元素
@@ -103,7 +124,11 @@ func (c *Cache) LRange(k string, start, stop int) ([]any, error) {
 // k 为Hash中的key
 // field 为hash中项
 func (c *Cache) HSet(k, field string, v any) {
-	c.hashes.HSet(k, field, v)
+	if exist := c.hashes.HSet(k, field, v); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeHash
+	}
 }
 
 // HGet 从Hash中获取存储的元素
@@ -130,7 +155,11 @@ func (c *Cache) HVals(k string) ([]any, error) {
 
 // SAdd 向集合中添加一个元素
 func (c *Cache) SAdd(k string, m any) {
-	c.sets.SAdd(k, m)
+	if exist := c.sets.SAdd(k, m); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[k] = types.TypeSet
+	}
 }
 
 // SRem 从集合中，删除一个元素
@@ -167,7 +196,11 @@ func (c *Cache) SInter(k1, k2 string) *types.Set {
 
 // ZAdd 向有序集合中添加一个元素
 func (c *Cache) ZAdd(key, element string, score float64) {
-	c.zSets.ZAdd(key, element, score)
+	if exist := c.zSets.ZAdd(key, element, score); !exist {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.keyMap[key] = types.TypeZSet
+	}
 }
 
 // ZRem 从有序集合中，删除一个元素
@@ -234,6 +267,8 @@ func (c *Cache) ZRevRangeWithScore(key string, start, stop int) (map[string]floa
 
 // Exists 判断key是否存在
 func (c *Cache) Exists(k string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if _, exist := c.keyMap[k]; exist {
 		return true
 	}
@@ -250,7 +285,9 @@ func (c *Cache) HExists(k, field string) bool {
 
 // Del 删除一个key
 func (c *Cache) Del(k string) {
+	c.mu.Lock()
 	t := c.keyMap[k]
+	c.mu.Unlock()
 	switch t {
 	case types.TypeString:
 		c.strings.Del(k)
@@ -267,5 +304,63 @@ func (c *Cache) Del(k string) {
 
 // Expiration 设置超时时间
 func (c *Cache) Expiration(k string, d time.Duration) error {
-	return nil
+	c.mu.Lock()
+	t := c.keyMap[k]
+	c.mu.Unlock()
+	var err error
+	switch t {
+	case types.TypeString:
+		err = c.strings.Expiration(k, d)
+	case types.TypeHash:
+		err = c.hashes.Expiration(k, d)
+	case types.TypeList:
+		err = c.lists.Expiration(k, d)
+	case types.TypeSet:
+		err = c.sets.Expiration(k, d)
+	case types.TypeZSet:
+		err = c.zSets.Expiration(k, d)
+	}
+	return err
+}
+
+// Flush 清空所有缓存
+func (c *Cache) Flush() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.strings.Flush()
+	c.lists.Flush()
+	c.hashes.Flush()
+	c.sets.Flush()
+	c.zSets.Flush()
+}
+
+// ======== 私有 =======
+
+func NewCleaner(c *Cache) *cleaner {
+	return &cleaner{
+		cache:    c,
+		duration: types.DefaultCleanDuration,
+	}
+}
+
+// cleaner 缓存清理器
+type cleaner struct {
+	cache    *Cache
+	duration time.Duration // 清理间隔
+}
+
+// keepClearExpiration 定时清理缓存
+func (c *cleaner) keepClearExpiration() {
+	timer := time.NewTimer(c.duration)
+	clearList := []func(){
+		c.cache.strings.RandomClearExpiration,
+		c.cache.hashes.RandomClearExpiration,
+		c.cache.lists.RandomClearExpiration,
+		c.cache.sets.RandomClearExpiration,
+		c.cache.zSets.RandomClearExpiration,
+	}
+	for range timer.C {
+		index := rand.Intn(5)
+		go clearList[index]()
+	}
 }

@@ -1,6 +1,9 @@
 package types
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // NewHashes 创建Hashes类型实例
 func NewHashes() *Hashes {
@@ -15,18 +18,45 @@ type Hashes struct {
 	items map[string]*Hash
 }
 
+// Exist 判断k是否存在
+func (hs *Hashes) Exist(k string) bool {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	return hs.exist(k)
+}
+
+// exist 判断k是否存在
+func (hs *Hashes) exist(k string) bool {
+	i, exist := hs.items[k]
+	if !exist {
+		return false
+	}
+	if i.isExpired() {
+		hs.Del(k)
+		return false
+	}
+	return true
+}
+
 // HSet 缓存数据到Hash中
 // k 为Hash中的key
 // field 为hash中项
-func (hs *Hashes) HSet(k, field string, v any) {
+// return exist bool 表示存储前k是否存在
+func (hs *Hashes) HSet(k, field string, v any) bool {
 	hs.mu.Lock()
 	defer hs.mu.Unlock()
+	return hs.hSet(k, field, v)
+}
+
+// hSet -
+func (hs *Hashes) hSet(k, field string, v any) bool {
 	h, exist := hs.items[k]
 	if !exist {
 		h = newHash()
 	}
 	h.HSet(field, v)
 	hs.items[k] = h
+	return exist
 }
 
 // HGet 从Hash中获取存储的元素
@@ -35,6 +65,9 @@ func (hs *Hashes) HGet(k, field string) (any, error) {
 	defer hs.mu.Unlock()
 	h, exist := hs.items[k]
 	if !exist {
+		return nil, ErrHashKey
+	} else if h.isExpired() {
+		hs.Del(k)
 		return nil, ErrHashKey
 	}
 	return h.HGet(field)
@@ -57,6 +90,9 @@ func (hs *Hashes) HKeys(k string) ([]string, error) {
 	h, exist := hs.items[k]
 	if !exist {
 		return nil, ErrHashKey
+	} else if h.isExpired() {
+		hs.Del(k)
+		return nil, ErrHashKey
 	}
 	return h.HKeys()
 }
@@ -68,6 +104,9 @@ func (hs *Hashes) HVals(k string) ([]any, error) {
 	h, exist := hs.items[k]
 	if !exist {
 		return nil, ErrHashKey
+	} else if h.isExpired() {
+		hs.Del(k)
+		return nil, ErrHashKey
 	}
 	return h.HVals()
 }
@@ -77,6 +116,51 @@ func (hs *Hashes) Del(k string) {
 	hs.mu.Lock()
 	defer hs.mu.Unlock()
 	delete(hs.items, k)
+}
+
+// Expiration 设置超时时间
+func (hs *Hashes) Expiration(k string, d time.Duration) error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	if !hs.exist(k) {
+		return ErrKeyNotExist
+	}
+	hs.items[k].expiration = time.Now().Add(d).UnixNano()
+	return nil
+}
+
+// ClearExpiration 清理过期的key
+func (hs *Hashes) ClearExpiration() {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	for key, item := range hs.items {
+		if item.isExpired() {
+			delete(hs.items, key)
+		}
+	}
+}
+
+// RandomClearExpiration 随机清理过期的key
+func (hs *Hashes) RandomClearExpiration() {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	var counter int
+	for key, item := range hs.items {
+		if counter > DefaultCleanItems {
+			return
+		}
+		if item.isExpired() {
+			delete(hs.items, key)
+		}
+		counter++
+	}
+}
+
+// Flush 清空缓存
+func (hs *Hashes) Flush() {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+	hs.items = make(map[string]*Hash)
 }
 
 // newHash 创建一个Hash的实例
@@ -137,4 +221,12 @@ func (h *Hash) HVals() ([]any, error) {
 		vals = append(vals, val)
 	}
 	return vals, nil
+}
+
+// isExpired 判断一个元素是否过期
+func (h *Hash) isExpired() bool {
+	if time.Now().UnixNano() > h.expiration {
+		return true
+	}
+	return false
 }
