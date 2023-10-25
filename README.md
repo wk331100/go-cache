@@ -18,7 +18,40 @@ go get github.com/wk331100/go-cache
 ```
 ## 调用示例
 ```go
+func main() {
+	// 初始化缓存
+	c := go_cache.NewCache()
+	// 写入String类型的缓存
+	c.Set("name", "ZhangSan")
+	c.Set("age", "18")
+	// 读取字符类型的缓存
+	if name, err := c.Get("name"); err == nil {
+		fmt.Println(name)
+	}
 
+	u := &user{
+		Uid:  1001,
+		Name: "zhangSan",
+		Age:  18,
+	}
+	bz, _ := json.Marshal(u)
+	// 写入Hash类型的缓存
+	c.HSet("users", "1001", bz)
+	// 读取Hash类型的缓存
+	if bzCache, err := c.HGet("users", "1001"); err == nil {
+		u1 := &user{}
+		fmt.Println(bzCache)
+		if err = json.Unmarshal(bzCache.([]byte), u1); err == nil {
+			fmt.Println(u1)
+		}
+	}
+}
+
+type user struct {
+	Uid  int
+	Name string
+	Age  int
+}
 ```
 
 
