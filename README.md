@@ -2,14 +2,20 @@
 
 ## 简介
 
-> hyper performance local cache written by Go！
-
 **基于Go编写的，高性能本地缓存。**
+
+> hyper performance local cache written by Go！
 
 特点：
 
 - 高性能，千万级读性能，百万级写性能
-- redis风格，可以像使用redis一样
+- `redis`风格，可以像使用`redis`一样
+- 支持`String`类型：Set、Get、SetEx、Incr、Decr、IncrBy、DecrBy
+- 支持`Hash`类型：HSet、HGet、HDel、HKeys、HVals
+- 支持`List`类型：LPush、RPoP、RPush、LPop、LLen、LRange
+- 支持`Set`类型：SAdd、SRem、SMembers、SIsMember、SCard、SUnion、SInter 等
+- 支持`ZSet`类型：ZAdd、ZRem、ZIncrBy、ZCard、ZRank ZRankWithScore、ZRevRank、ZRevRankWithScore、ZRange、ZRangeWithScore、ZRevRange、ZRevRangeWithScore
+- 支持 `Del`、`Exist`、`Expiration`、`Flush` 等操作
 
 ## 使用方式
 **获取包**
@@ -18,7 +24,40 @@ go get github.com/wk331100/go-cache
 ```
 ## 调用示例
 ```go
+func main() {
+    // 初始化缓存
+    c := go_cache.NewCache()
+    // 写入String类型的缓存
+    c.Set("name", "ZhangSan")
+    c.Set("age", "18")
+    // 读取字符类型的缓存
+    if name, err := c.Get("name"); err == nil {
+        fmt.Println(name)
+    }
 
+    u := &user{
+        Uid:  1001,
+        Name: "zhangSan",
+        Age:  18,
+    }
+    bz, _ := json.Marshal(u)
+    // 写入Hash类型的缓存
+    c.HSet("users", "1001", bz)
+    // 读取Hash类型的缓存
+    if bzCache, err := c.HGet("users", "1001"); err == nil {
+        u1 := &user{}
+        fmt.Println(bzCache)
+        if err = json.Unmarshal(bzCache.([]byte), u1); err == nil {
+            fmt.Println(u1)
+        }
+    }
+}
+
+type user struct {
+    Uid  int
+    Name string
+    Age  int
+}
 ```
 
 
@@ -35,14 +74,14 @@ go get github.com/wk331100/go-cache
 ### string 写性能: 93万QPS
 ```go
 func TestSetStringQPS(t *testing.T) {
-	start := time.Now()
-	loop := 1000000
-	for j := 0; j < loop; j++ {
-		c.Set(strconv.Itoa(j), "h")
-	}
-	d := time.Now().Sub(start)
-	fmt.Printf("benchmark set string: %v\n", d.Seconds())
-	fmt.Printf("benchmark set string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+    start := time.Now()
+    loop := 1000000
+    for j := 0; j < loop; j++ {
+        c.Set(strconv.Itoa(j), "h")
+    }
+    d := time.Now().Sub(start)
+    fmt.Printf("benchmark set string: %v\n", d.Seconds())
+    fmt.Printf("benchmark set string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }
 ```
 结果：
@@ -57,15 +96,15 @@ PASS
 ### string 修改值性能: 2578万QPS
 ```go
 func TestSetSameStringQPS(t *testing.T) {
-	start := time.Now()
-	key := "benchmark"
+    start := time.Now()
+    key := "benchmark"
     loop := 1000000
-	for j := 0; j < loop; j++ {
-		c.Set(key, "h")
-	}
-	d := time.Now().Sub(start)
-	fmt.Printf("benchmark set same string: %v\n", d.Seconds())
-	fmt.Printf("benchmark set same string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+    for j := 0; j < loop; j++ {
+        c.Set(key, "h")
+    }
+    d := time.Now().Sub(start)
+    fmt.Printf("benchmark set same string: %v\n", d.Seconds())
+    fmt.Printf("benchmark set same string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }
 ```
 结果：
@@ -80,15 +119,15 @@ PASS
 ### string 读性能: 1936万QPS
 ```go
 func TestGetStringQPS(t *testing.T) {
-	start := time.Now()
-	key := "benchmark"
-	loop := 1000000
-	for j := 0; j < loop; j++ {
-		_, _ = c.Get(key)
-	}
-	d := time.Now().Sub(start)
-	fmt.Printf("benchmark get string: %v\n", d.Seconds())
-	fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+    start := time.Now()
+    key := "benchmark"
+    loop := 1000000
+    for j := 0; j < loop; j++ {
+        _, _ = c.Get(key)
+    }
+    d := time.Now().Sub(start)
+    fmt.Printf("benchmark get string: %v\n", d.Seconds())
+    fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }
 ```
 结果：
@@ -103,15 +142,15 @@ PASS
 ### hash 写性能: 216万QPS
 ```go
 func TestSetHashQPS(t *testing.T) {
-	start := time.Now()
-	key := "benchmark"
-	loop := 1000000
-	for j := 0; j < loop; j++ {
-		c.HSet(key, strconv.Itoa(j), "h")
-	}
-	d := time.Now().Sub(start)
-	fmt.Printf("benchmark set hash: %v s\n", d.Seconds())
-	fmt.Printf("benchmark set hash qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+    start := time.Now()
+    key := "benchmark"
+    loop := 1000000
+    for j := 0; j < loop; j++ {
+        c.HSet(key, strconv.Itoa(j), "h")
+    }
+    d := time.Now().Sub(start)
+    fmt.Printf("benchmark set hash: %v s\n", d.Seconds())
+    fmt.Printf("benchmark set hash qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }
 ```
 结果：
@@ -126,15 +165,15 @@ PASS
 ### hash 读性能: 1728万QPS
 ```go
 func TestGetHashQPS(t *testing.T) {
-	start := time.Now()
-	key := "benchmark"
-	loop := 1000000
-	for j := 0; j < loop; j++ {
-		_, _ = c.HGet(key, strconv.Itoa(j))
-	}
-	d := time.Now().Sub(start)
-	fmt.Printf("benchmark get string: %v\n", d.Seconds())
-	fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+    start := time.Now()
+    key := "benchmark"
+    loop := 1000000
+    for j := 0; j < loop; j++ {
+        _, _ = c.HGet(key, strconv.Itoa(j))
+    }
+    d := time.Now().Sub(start)
+    fmt.Printf("benchmark get string: %v\n", d.Seconds())
+    fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }
 ```
 结果：
