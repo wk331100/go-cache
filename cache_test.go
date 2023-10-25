@@ -1,7 +1,12 @@
 package go_cache
 
 import (
+	"fmt"
+	"go-cache/types"
+	"math"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +57,7 @@ func TestLPushRPopLLen(t *testing.T) {
 	c.LPush(key, 3)
 	c.LPush(key, 2)
 	c.LPush(key, 1)
+
 	l = c.LLen(key)
 	require.Equal(t, 5, l)
 	v, err := c.RPop(key)
@@ -226,4 +232,97 @@ func TestRange(t *testing.T) {
 	m, err = c.ZRevRangeWithScore(key, 1, 1)
 	require.Nil(t, err)
 	require.Equal(t, map[string]float64{e3: 95}, m)
+}
+
+func TestExpiration(t *testing.T) {
+	k := "exp"
+	v := "hello"
+	c.SetEx(k, v, time.Microsecond*500)
+	v1, err := c.Get(k)
+	require.Nil(t, err)
+	require.Equal(t, v, v1)
+	time.Sleep(time.Second)
+	v2, err := c.Get(k)
+	require.Nil(t, nil, v2)
+	require.Equal(t, types.ErrKeyNotExist, err)
+}
+
+// ========== test benchmark ==============
+
+func BenchmarkSetString(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	key := "benchmark"
+
+	for j := 0; j < b.N; j++ {
+		c.Set(key, "h")
+	}
+}
+
+func BenchmarkGetString(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	key := "benchmark"
+	for j := 0; j < b.N; j++ {
+		_, _ = c.Get(key)
+	}
+}
+
+func TestSetStringQPS(t *testing.T) {
+	start := time.Now()
+	loop := 1000000
+	for j := 0; j < loop; j++ {
+		c.Set(strconv.Itoa(j), "h")
+	}
+	d := time.Now().Sub(start)
+	fmt.Printf("benchmark set string: %v s\n", d.Seconds())
+	fmt.Printf("benchmark set string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+}
+
+func TestSetSameStringQPS(t *testing.T) {
+	start := time.Now()
+	key := "benchmark"
+	loop := 1000000
+	for j := 0; j < loop; j++ {
+		c.Set(key, "h")
+	}
+	d := time.Now().Sub(start)
+	fmt.Printf("benchmark set same string: %v s\n", d.Seconds())
+	fmt.Printf("benchmark set same string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+}
+
+func TestGetStringQPS(t *testing.T) {
+	start := time.Now()
+	key := "benchmark"
+	loop := 1000000
+	for j := 0; j < loop; j++ {
+		_, _ = c.Get(key)
+	}
+	d := time.Now().Sub(start)
+	fmt.Printf("benchmark get string: %v s\n", d.Seconds())
+	fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+}
+
+func TestSetHashQPS(t *testing.T) {
+	start := time.Now()
+	key := "benchmark"
+	loop := 1000000
+	for j := 0; j < loop; j++ {
+		c.HSet(key, strconv.Itoa(j), "h")
+	}
+	d := time.Now().Sub(start)
+	fmt.Printf("benchmark set hash: %v s\n", d.Seconds())
+	fmt.Printf("benchmark set hash qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
+}
+
+func TestGetHashQPS(t *testing.T) {
+	start := time.Now()
+	key := "benchmark"
+	loop := 1000000
+	for j := 0; j < loop; j++ {
+		_, _ = c.HGet(key, strconv.Itoa(j))
+	}
+	d := time.Now().Sub(start)
+	fmt.Printf("benchmark get string: %v\n", d.Seconds())
+	fmt.Printf("benchmark get string qps: %.0f \n", math.Round(float64(loop)/d.Seconds()))
 }

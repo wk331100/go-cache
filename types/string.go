@@ -32,7 +32,7 @@ func (s *Strings) exist(k string) bool {
 		return false
 	}
 	if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return false
 	}
 	return true
@@ -72,7 +72,7 @@ func (s *Strings) Get(k string) (any, error) {
 	if !exist {
 		return nil, ErrKeyNotExist
 	} else if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return nil, ErrKeyNotExist
 	}
 	return i.Get(), nil
@@ -86,7 +86,7 @@ func (s *Strings) Incr(k string) {
 	if !exist {
 		i = newItem()
 	} else if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return
 	}
 	i.Incr()
@@ -101,7 +101,7 @@ func (s *Strings) Decr(k string) {
 	if !exist {
 		i = newItem()
 	} else if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return
 	}
 	i.Decr()
@@ -116,7 +116,7 @@ func (s *Strings) IncrBy(k string, v int64) {
 	if !exist {
 		i = newItem()
 	} else if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return
 	}
 	i.IncrBy(v)
@@ -131,7 +131,7 @@ func (s *Strings) DecrBy(k string, v int64) {
 	if !exist {
 		i = newItem()
 	} else if i.isExpired() {
-		s.Del(k)
+		s.del(k)
 		return
 	}
 	i.DecrBy(v)
@@ -142,6 +142,10 @@ func (s *Strings) DecrBy(k string, v int64) {
 func (s *Strings) Del(k string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.del(k)
+}
+
+func (s *Strings) del(k string) {
 	delete(s.items, k)
 }
 

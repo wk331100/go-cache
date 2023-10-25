@@ -225,7 +225,7 @@ func (h *Hash) HVals() ([]any, error) {
 
 // isExpired 判断一个元素是否过期
 func (h *Hash) isExpired() bool {
-	if time.Now().UnixNano() > h.expiration {
+	if h.expiration != DefaultExpiration && time.Now().UnixNano() > h.expiration {
 		return true
 	}
 	return false

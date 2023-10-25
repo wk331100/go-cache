@@ -33,7 +33,7 @@ func (zs *ZSets) exist(k string) bool {
 		return false
 	}
 	if z.isExpired() {
-		zs.Del(k)
+		zs.del(k)
 		return false
 	}
 	return true
@@ -96,7 +96,7 @@ func (zs *ZSets) ZCard(key string) int {
 	if !exist {
 		return 0
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return 0
 	}
 	return z.ZCard()
@@ -110,7 +110,7 @@ func (zs *ZSets) ZRank(key, element string) int {
 	if !exist {
 		return ErrorRank
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return ErrorRank
 	}
 	return z.ZRank(element)
@@ -124,7 +124,7 @@ func (zs *ZSets) ZRankWithScore(key, element string) (int, float64) {
 	if !exist {
 		return ErrorRank, DefaultScore
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return ErrorRank, DefaultScore
 	}
 	return z.ZRankWithScore(element)
@@ -138,7 +138,7 @@ func (zs *ZSets) ZRevRank(key, element string) int {
 	if !exist {
 		return ErrorRank
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return ErrorRank
 	}
 	return z.ZRevRank(element)
@@ -152,7 +152,7 @@ func (zs *ZSets) ZRevRankWithScore(key, element string) (int, float64) {
 	if !exist {
 		return ErrorRank, DefaultScore
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return ErrorRank, DefaultScore
 	}
 	return z.ZRevRankWithScore(element)
@@ -166,7 +166,7 @@ func (zs *ZSets) ZRange(key string, start, stop int) ([]string, error) {
 	if !exist {
 		return nil, ErrZSetKey
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -183,7 +183,7 @@ func (zs *ZSets) ZRangeWithScore(key string, start, stop int) (map[string]float6
 	if !exist {
 		return nil, ErrZSetKey
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -200,7 +200,7 @@ func (zs *ZSets) ZRevRange(key string, start, stop int) ([]string, error) {
 	if !exist {
 		return nil, ErrZSetKey
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -217,7 +217,7 @@ func (zs *ZSets) ZRevRangeWithScore(key string, start, stop int) (map[string]flo
 	if !exist {
 		return nil, ErrZSetKey
 	} else if z.isExpired() {
-		zs.Del(key)
+		zs.del(key)
 		return nil, ErrZSetKey
 	}
 	if start > stop {
@@ -230,6 +230,11 @@ func (zs *ZSets) ZRevRangeWithScore(key string, start, stop int) (map[string]flo
 func (zs *ZSets) Del(k string) {
 	zs.mu.Lock()
 	defer zs.mu.Unlock()
+	zs.del(k)
+}
+
+// del 删除一个key
+func (zs *ZSets) del(k string) {
 	delete(zs.items, k)
 }
 
@@ -281,7 +286,8 @@ func (zs *ZSets) Flush() {
 // NewZSet 创建一个集合的实例
 func newZSet() *ZSet {
 	return &ZSet{
-		elements: make(map[string]float64),
+		elements:   make(map[string]float64),
+		expiration: DefaultExpiration,
 	}
 }
 
@@ -440,7 +446,7 @@ func (z *ZSet) ZRevRangeWithScore(start, stop int) map[string]float64 {
 
 // isExpired 判断一个元素是否过期
 func (z *ZSet) isExpired() bool {
-	if time.Now().UnixNano() > z.expiration {
+	if z.expiration != DefaultExpiration && time.Now().UnixNano() > z.expiration {
 		return true
 	}
 	return false

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -32,7 +33,7 @@ func (ss *Sets) exist(k string) bool {
 		return false
 	}
 	if s.isExpired() {
-		ss.Del(k)
+		ss.del(k)
 		return false
 	}
 	return true
@@ -70,7 +71,7 @@ func (ss *Sets) SMembers(k string) ([]any, error) {
 	if !exist {
 		return nil, ErrSetKey
 	} else if s.isExpired() {
-		ss.Del(k)
+		ss.del(k)
 		return nil, ErrSetKey
 	}
 	return s.SMembers()
@@ -84,7 +85,7 @@ func (ss *Sets) SIsMember(k string, m any) (bool, error) {
 	if !exist {
 		return false, ErrSetKey
 	} else if s.isExpired() {
-		ss.Del(k)
+		ss.del(k)
 		return false, ErrSetKey
 	}
 	return s.SIsMember(m)
@@ -98,7 +99,8 @@ func (ss *Sets) SCard(k string) int {
 	if !exist {
 		return 0
 	} else if s.isExpired() {
-		ss.Del(k)
+		fmt.Println("111")
+		ss.del(k)
 		return 0
 	}
 	return s.SCard()
@@ -148,6 +150,10 @@ func (ss *Sets) SInter(k1, k2 string) *Set {
 func (ss *Sets) Del(k string) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
+	ss.del(k)
+}
+
+func (ss *Sets) del(k string) {
 	delete(ss.items, k)
 }
 
@@ -199,7 +205,8 @@ func (ss *Sets) Flush() {
 // newSet 创建一个集合的实例
 func newSet() *Set {
 	return &Set{
-		sets: make(map[any]struct{}),
+		sets:       make(map[any]struct{}),
+		expiration: DefaultExpiration,
 	}
 }
 
@@ -264,7 +271,7 @@ func (s *Set) SInter(other *Set) *Set {
 
 // isExpired 判断一个元素是否过期
 func (s *Set) isExpired() bool {
-	if time.Now().UnixNano() > s.expiration {
+	if s.expiration != DefaultExpiration && time.Now().UnixNano() > s.expiration {
 		return true
 	}
 	return false

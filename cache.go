@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// NewCache 创建新的缓存对象
+// NewCache 创建新的缓存服务
 func NewCache() *Cache {
 	c := &Cache{
 		keyMap:  make(map[string]types.KeyType),
@@ -17,7 +17,8 @@ func NewCache() *Cache {
 		sets:    types.NewSets(),
 		zSets:   types.NewZSets(),
 	}
-	go NewCleaner(c).keepClearExpiration()
+	c.gc = newRandomGC(c)
+	go c.gc.Clean()
 	return c
 }
 
@@ -25,12 +26,19 @@ func NewCache() *Cache {
 // items 为string类型的映射
 type Cache struct {
 	mu      sync.Mutex
+	gc      GC
 	keyMap  map[string]types.KeyType
 	strings *types.Strings
 	lists   *types.Lists
 	hashes  *types.Hashes
 	sets    *types.Sets
 	zSets   *types.ZSets
+}
+
+// destroy 摧毁缓存
+func (c *Cache) destroy() {
+	go c.gc.Stop()
+	c.Flush()
 }
 
 // ======== 字符串 =======
@@ -336,22 +344,29 @@ func (c *Cache) Flush() {
 
 // ======== 私有 =======
 
-func NewCleaner(c *Cache) *cleaner {
-	return &cleaner{
+type GC interface {
+	Clean()
+	Stop()
+}
+
+func newRandomGC(c *Cache) GC {
+	return &randomGC{
 		cache:    c,
+		stopC:    make(chan struct{}),
 		duration: types.DefaultCleanDuration,
 	}
 }
 
-// cleaner 缓存清理器
-type cleaner struct {
+// randomGC 缓存清理器
+type randomGC struct {
 	cache    *Cache
-	duration time.Duration // 清理间隔
+	duration time.Duration // 清理间隔\
+	stopC    chan struct{}
 }
 
-// keepClearExpiration 定时清理缓存
-func (c *cleaner) keepClearExpiration() {
-	timer := time.NewTimer(c.duration)
+// Clean 定时清理缓存
+func (c *randomGC) Clean() {
+	ticker := time.NewTicker(c.duration)
 	clearList := []func(){
 		c.cache.strings.RandomClearExpiration,
 		c.cache.hashes.RandomClearExpiration,
@@ -359,8 +374,17 @@ func (c *cleaner) keepClearExpiration() {
 		c.cache.sets.RandomClearExpiration,
 		c.cache.zSets.RandomClearExpiration,
 	}
-	for range timer.C {
-		index := rand.Intn(5)
-		go clearList[index]()
+	for {
+		select {
+		case <-c.stopC:
+			return
+		case <-ticker.C:
+			index := rand.Intn(5)
+			go clearList[index]()
+		}
 	}
+}
+
+func (c *randomGC) Stop() {
+	c.stopC <- struct{}{}
 }

@@ -32,7 +32,7 @@ func (ls *Lists) exist(k string) bool {
 		return false
 	}
 	if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return false
 	}
 	return true
@@ -47,7 +47,7 @@ func (ls *Lists) LPush(k string, v any) bool {
 	if !exist {
 		l = newList()
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return false
 	}
 	l.LPush(v)
@@ -63,7 +63,7 @@ func (ls *Lists) LPop(k string) (any, error) {
 	if !exist {
 		return nil, ErrKeyNotExist
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return nil, ErrKeyNotExist
 	}
 	return l.LPop()
@@ -77,7 +77,7 @@ func (ls *Lists) RPush(k string, v any) bool {
 	if !exist {
 		l = newList()
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return false
 	}
 	l.RPush(v)
@@ -93,7 +93,7 @@ func (ls *Lists) RPop(k string) (any, error) {
 	if !exist {
 		return nil, ErrKeyNotExist
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return nil, ErrKeyNotExist
 	}
 	return l.RPop()
@@ -107,7 +107,7 @@ func (ls *Lists) LLen(k string) int {
 	if !exist {
 		return 0
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return 0
 	}
 	return l.LLen()
@@ -124,7 +124,7 @@ func (ls *Lists) LRange(k string, start, stop int) ([]any, error) {
 	if !exist {
 		return nil, ErrKeyNotExist
 	} else if l.isExpired() {
-		ls.Del(k)
+		ls.del(k)
 		return nil, ErrKeyNotExist
 	}
 	return l.LRange(start, stop)
@@ -134,6 +134,10 @@ func (ls *Lists) LRange(k string, start, stop int) ([]any, error) {
 func (ls *Lists) Del(k string) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
+	ls.del(k)
+}
+
+func (ls *Lists) del(k string) {
 	delete(ls.items, k)
 }
 
@@ -244,7 +248,7 @@ func (l *List) LRange(start, stop int) ([]any, error) {
 
 // isExpired 判断一个元素是否过期
 func (l *List) isExpired() bool {
-	if time.Now().UnixNano() > l.expiration {
+	if l.expiration != DefaultExpiration && time.Now().UnixNano() > l.expiration {
 		return true
 	}
 	return false
