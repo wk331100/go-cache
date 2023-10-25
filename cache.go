@@ -1,10 +1,11 @@
 package go_cache
 
 import (
-	"go-cache/types"
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/wk331100/go-cache/types"
 )
 
 // NewCache 创建新的缓存服务
