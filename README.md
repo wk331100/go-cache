@@ -10,6 +10,12 @@
 
 - 高性能，千万级读性能，百万级写性能
 - redis风格，可以像使用redis一样
+- 支持String类型：Set、Get、SetEx、Incr、Decr、IncrBy、DecrBy
+- 支持Hash类型：HSet、HGet、HDel、HKeys、HVals
+- 支持List类型：LPush、RPoP、RPush、LPop、LLen、LRange
+- 支持Set类型：SAdd、SRem、SMembers、SIsMember、SCard、SUnion、SInter 等
+- 支持ZSet类型：ZAdd、ZRem、ZIncrBy、ZCard、ZRank ZRankWithScore、ZRevRank、ZRevRankWithScore、ZRange、ZRangeWithScore、ZRevRange、ZRevRangeWithScore
+- 支持 Del、Exist、Expiration、Flush 等操作
 
 ## 使用方式
 **获取包**
